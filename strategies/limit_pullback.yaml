@@ -1,0 +1,51 @@
+# Limit Pullback Strategy / 涨停回马枪
+# Detects pullback signals after a limit-up, indicating potential trend continuation.
+
+name: limit_pullback
+display_name: 涨停回马枪
+description: 检测涨停后回调企稳、放量回升信号，潜在趋势延续信号。
+category: trend_continuation
+core_rules: [2, 4]
+required_tools:
+  - get_daily_history
+  - analyze_trend
+  - get_realtime_quote
+  - search_stock_news
+
+instructions: |
+  **涨停回马枪（Limit Pullback Strategy）**
+
+  核心逻辑：强势股涨停后缩量回调，清洗浮筹后再次放量启动，是趋势延续的经典形态。
+
+  ## 分析步骤
+
+  ### 1. 前期涨停确认（趋势启动）
+  - 使用 `get_daily_history` 获取近 10 日数据。
+  - **涨停基因**：近 10 日内出现至少 1 个涨停板（收盘价 = 当日涨停价）。
+  - **趋势确认**：使用 `analyze_trend` 确认 trend_status 为 BULL 或 STRONG_BULL（依托多头趋势）。
+
+  ### 2. 回调企稳判定
+  - **回调幅度**：涨停后回调幅度控制在 5%-15% 之间，且未跌破涨停板当日低点。
+  - **量能萎缩**：回调期间每日成交量 < 5 日均量的 0.8 倍，呈逐步缩量态势。
+  - **形态特征**：回调 K 线多为小阴、小阳或十字星，最终企稳于 5/10/20 日均线附近。
+
+  ### 3. 放量回升信号（买入触发）
+  - **放量启动**：企稳后当日放量上涨，成交量 > 5 日均量的 1.5 倍（或 > 回调期间平均成交量的 2 倍）。
+  - **实时量比**：使用 `get_realtime_quote` 确认 volume_ratio > 1.5。
+  - **价格突破**：收盘价站上回调期间高点，或接近前期涨停价（价差 < 3%）。
+
+  ### 4. 确认因素（关联理念 4：量价配合）
+  - **基本面排雷**：使用 `search_stock_news` 确认无基本面利空，优选有持续催化的标的。
+  - **筹码结构**：获利盘占比 60%-80%（未过度获利出逃），筹码峰集中。
+
+  ### 5. 风险控制（关联理念 2：趋势交易）
+  - **逆势过滤**：这是趋势延续信号，需依托原多头趋势，逆势回调无效。
+  - **止损设置**：严格设在回调低点下方 1%-2%，跌破立即离场。
+  - **仓位管理**：建议 3-5 成，前期为一字涨停板的标的可适当提高仓位。
+
+  评分调整：
+  - 涨停回马枪形态确认：`sentiment_score +10`
+  - 回调缩量充分（<5 日均量 0.6 倍）：`sentiment_score +3`
+  - 放量回升配合持续催化（新闻 / 政策）：`sentiment_score +5`
+  - 止损建议：设在回调期间最低价位下方 1%-2%。
+  - 在 `buy_reason` 和 `pattern_analysis` 中注明 "涨停回马枪"。
