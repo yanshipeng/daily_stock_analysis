@@ -164,6 +164,8 @@ jobs:
           # ==========================================
           STOCK_LIST: ${{ vars.STOCK_LIST || secrets.STOCK_LIST || '600519' }}
           MARKET_REVIEW_REGION: ${{ vars.MARKET_REVIEW_REGION || secrets.MARKET_REVIEW_REGION || 'cn' }}
+          PICK_STOCKS_ENABLED: ${{ vars.PICK_STOCKS_ENABLED || secrets.PICK_STOCKS_ENABLED || vars.ENABLE_PICK_STOCKS || secrets.ENABLE_PICK_STOCKS || 'false' }}
+          PICK_STOCKS_TOP_K: ${{ vars.PICK_STOCKS_TOP_K || secrets.PICK_STOCKS_TOP_K || '6' }}
           
           # ==========================================
           # 运行配置 ⬅️ 新增！
@@ -205,6 +207,20 @@ jobs:
           echo "=========================================="
           echo "⏰ 时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
           echo "🎯 运行模式: $MODE"
+
+          PICK_STOCKS_ENABLED="${PICK_STOCKS_ENABLED,,}"
+          if [ "$PICK_STOCKS_ENABLED" = "true" ] || [ "$PICK_STOCKS_ENABLED" = "1" ] || [ "$PICK_STOCKS_ENABLED" = "yes" ] || [ "$PICK_STOCKS_ENABLED" = "on" ]; then
+            echo "🧠 启用自动选股：运行 pick_stocks.py 获取同花顺选股结果"
+            export PICKS_TRADE_DATE="$(TZ='Asia/Shanghai' date '+%Y-%m-%d')"
+            PICKED_CODES="$(python pick_stocks.py --print-codes --top-k "$PICK_STOCKS_TOP_K" --trade-date "$PICKS_TRADE_DATE" --no-save || true)"
+            if [ -n "$PICKED_CODES" ]; then
+              STOCK_LIST="$PICKED_CODES"
+              echo "✅ 自动选股完成，已覆盖 STOCK_LIST: $STOCK_LIST"
+            else
+              echo "⚠️ 自动选股结果为空或失败，继续使用原 STOCK_LIST: $STOCK_LIST"
+            fi
+          fi
+
           echo "📊 自选股: $STOCK_LIST"
           echo "📝 报告类型: $REPORT_TYPE"
           echo ""
@@ -212,7 +228,7 @@ jobs:
           echo "📋 配置检查"
           echo "=========================================="
           echo "【AI 配置】"
-          echo "  LiteLLM: $([ -n "$LITELLM_CONFIG" ] || [ -n "$LITELLM_API_KEY" ] || [ -n "$LITELLM_MODEL" ] && echo '✅ 已配置' || echo '❌ 未配置')"
+          echo "  LiteLLM: $(if [ -n "$LITELLM_CONFIG" ] || [ -n "$LITELLM_API_KEY" ] || [ -n "$LITELLM_MODEL" ]; then echo '✅ 已配置'; else echo '❌ 未配置'; fi)"
           echo "  Gemini API Key: $([ -n "$GEMINI_API_KEY" ] && echo '✅ 已配置' || echo '❌ 未配置')"
           echo "  DeepSeek Key:   $([ -n "$DEEPSEEK_API_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  AIHubMix Key:   $([ -n "$AIHUBMIX_KEY" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
@@ -245,7 +261,7 @@ jobs:
           echo "  Telegram: $([ -n "$TELEGRAM_BOT_TOKEN" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  Discord: $([ -n "$DISCORD_WEBHOOK_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
           echo "  AstrBot: $([ -n "$ASTRBOT_URL" ] && echo '✅ 已配置' || echo '⚪ 未配置')"
-          echo "  Slack: $(([ -n "$SLACK_WEBHOOK_URL" ] || ([ -n "$SLACK_BOT_TOKEN" ] && [ -n "$SLACK_CHANNEL_ID" ])) && echo '✅ 已配置' || echo '⚪ 未配置')"
+          echo "  Slack: $(if [ -n "$SLACK_WEBHOOK_URL" ] || { [ -n "$SLACK_BOT_TOKEN" ] && [ -n "$SLACK_CHANNEL_ID" ]; }; then echo '✅ 已配置'; else echo '⚪ 未配置'; fi)"
           echo "=========================================="
           echo ""
           
