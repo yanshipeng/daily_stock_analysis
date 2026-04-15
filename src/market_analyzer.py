@@ -14,7 +14,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 import pandas as pd
 
@@ -56,6 +56,8 @@ class MarketIndex:
     volume: float = 0.0          # 成交量（手）
     amount: float = 0.0          # 成交额（元）
     amplitude: float = 0.0       # 振幅(%)
+    ma5: float = 0.0             # 5日均线
+    ma30: float = 0.0            # 30日均线
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -70,6 +72,8 @@ class MarketIndex:
             'volume': self.volume,
             'amount': self.amount,
             'amplitude': self.amplitude,
+            'ma5': self.ma5,
+            'ma30': self.ma30,
         }
 
 
@@ -151,6 +155,32 @@ class MarketAnalyzer:
         if self.region == "us":
             return "USD bn" if self._get_review_language() == "en" else "十亿美元"
         return "CNY 100m" if self._get_review_language() == "en" else "亿"
+
+    def _get_index_ma(self, code: str) -> tuple[Optional[float], Optional[float]]:
+        """获取指数的5日和30日均线"""
+        try:
+            if self.region == "us":
+                import yfinance as yf
+                symbol = "^GSPC" if code == "SPX" else code
+                df = yf.download(symbol, period="2mo", progress=False)
+                if not df.empty and len(df) >= 30:
+                    close_series = df['Close']
+                    if isinstance(close_series, pd.DataFrame):
+                        close_series = close_series.iloc[:, 0]
+                    ma5 = float(close_series.tail(5).mean())
+                    ma30 = float(close_series.tail(30).mean())
+                    return ma5, ma30
+            else:
+                import akshare as ak
+                symbol = f"sh{code}" if not code.startswith(("sh", "sz")) else code
+                df = ak.index_zh_a_hist(symbol=symbol, period="daily")
+                if df is not None and not df.empty and len(df) >= 30:
+                    ma5 = float(df['收盘'].tail(5).mean())
+                    ma30 = float(df['收盘'].tail(30).mean())
+                    return ma5, ma30
+        except Exception as e:
+            logger.warning(f"获取指数 {code} 的均线数据失败: {e}")
+        return None, None
 
     def _format_turnover_value(self, amount_raw: float) -> str:
         """Format raw turnover according to market-specific units."""
@@ -262,6 +292,32 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         return overview
 
     
+    def _get_index_ma(self, code: str) -> Tuple[Optional[float], Optional[float]]:
+        """获取指数的5日和30日均线"""
+        try:
+            if self.region == "us":
+                import yfinance as yf
+                symbol = "^GSPC" if code == "SPX" else code
+                df = yf.download(symbol, period="2mo", progress=False)
+                if not df.empty and len(df) >= 30:
+                    close_series = df['Close']
+                    if isinstance(close_series, pd.DataFrame):
+                        close_series = close_series.iloc[:, 0]
+                    ma5 = float(close_series.tail(5).mean())
+                    ma30 = float(close_series.tail(30).mean())
+                    return ma5, ma30
+            else:
+                import akshare as ak
+                symbol = f"sh{code}" if not code.startswith(("sh", "sz")) else code
+                df = ak.index_zh_a_hist(symbol=symbol, period="daily")
+                if df is not None and not df.empty and len(df) >= 30:
+                    ma5 = float(df['收盘'].tail(5).mean())
+                    ma30 = float(df['收盘'].tail(30).mean())
+                    return ma5, ma30
+        except Exception as e:
+            logger.warning(f"获取指数 {code} 的均线数据失败: {e}")
+        return 0.0, 0.0
+
     def _get_main_indices(self) -> List[MarketIndex]:
         """获取主要指数实时行情"""
         indices = []
@@ -274,6 +330,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
 
             if data_list:
                 for item in data_list:
+                    ma5, ma30 = self._get_index_ma(item['code'])
                     index = MarketIndex(
                         code=item['code'],
                         name=item['name'],
@@ -286,7 +343,9 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                         prev_close=item['prev_close'],
                         volume=item['volume'],
                         amount=item['amount'],
-                        amplitude=item['amplitude']
+                        amplitude=item['amplitude'],
+                        ma5=ma5,
+                        ma30=ma30
                     )
                     indices.append(index)
 
@@ -556,6 +615,8 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         for idx in overview.indices:
             direction = "↑" if idx.change_pct > 0 else "↓" if idx.change_pct < 0 else "-"
             indices_text += f"- {idx.name}: {idx.current:.2f} ({direction}{abs(idx.change_pct):.2f}%)\n"
+            if idx.ma5 > 0 and idx.ma30 > 0 and idx.ma5 > idx.ma30:
+                indices_text += f"  - 注意：当前 {idx.name} 5日均线({idx.ma5:.2f}) 大于 30日均线({idx.ma30:.2f})，呈现短期多头趋势。\n"
         
         # 板块信息
         top_sectors_text = ", ".join([f"{s['name']}({s['change_pct']:+.2f}%)" for s in overview.top_sectors[:3]])
@@ -782,6 +843,11 @@ Output the report content directly, no extra commentary.
         for idx in overview.indices[:4]:
             direction = "↑" if idx.change_pct > 0 else "↓" if idx.change_pct < 0 else "-"
             indices_text += f"- **{idx.name}**: {idx.current:.2f} ({direction}{abs(idx.change_pct):.2f}%)\n"
+            if idx.ma5 > 0 and idx.ma30 > 0 and idx.ma5 > idx.ma30:
+                if template_language == "en":
+                    indices_text += f"  - Note: {idx.name} MA5({idx.ma5:.2f}) > MA30({idx.ma30:.2f}), showing a short-term bullish trend.\n"
+                else:
+                    indices_text += f"  - 注意：当前 {idx.name} 5日均线({idx.ma5:.2f}) 大于 30日均线({idx.ma30:.2f})，呈现短期多头趋势。\n"
         
         # 板块信息
         separator = ", " if template_language == "en" else "、"
