@@ -44,7 +44,7 @@ def to_float_safe(x) -> Optional[float]:
 def build_10jqka_url_from_text(trade_date: str, query_text: str) -> str:
     base = "https://backtest.10jqka.com.cn/tradebacktest/historypick"
     enc = urllib.parse.quote(query_text, safe="")
-    params = f"query={enc}&hold_num=6&trade_date={trade_date}&menv=dma3"
+    params = f"query={enc}&hold_num=1&trade_date={trade_date}&menv=dma3"
     return f"{base}?{params}"
 
 def fetch_10jqka_picks_text(trade_date: str, query_text: str) -> dict:
